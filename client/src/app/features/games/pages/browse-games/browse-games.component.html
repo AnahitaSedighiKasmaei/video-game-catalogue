@@ -1,0 +1,53 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Video Game Catalogue</h1>
+</div>
+
+<div class="mb-3">
+  <input
+    type="search"
+    class="form-control"
+    placeholder="Search by title, genre, platform or publisher…"
+    [formControl]="searchControl"
+    aria-label="Search games" />
+</div>
+
+@if (error) {
+  <div class="alert alert-danger">Could not load games. Is the API running?</div>
+}
+
+@if (games$ | async; as games) {
+  @if (games.length === 0 && !loading) {
+    <div class="alert alert-info">No games match your search.</div>
+  } @else {
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th scope="col">Title</th>
+            <th scope="col">Genre</th>
+            <th scope="col">Platform</th>
+            <th scope="col">Publisher</th>
+            <th scope="col">Released</th>
+            <th scope="col" class="text-end">Rating</th>
+            <th scope="col" class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (game of games; track game.id) {
+            <tr>
+              <td>{{ game.title }}</td>
+              <td>{{ game.genre }}</td>
+              <td>{{ game.platform }}</td>
+              <td>{{ game.publisher }}</td>
+              <td>{{ game.releaseDate | date: 'mediumDate' }}</td>
+              <td class="text-end">{{ game.rating | number: '1.1-1' }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" [routerLink]="['/games', game.id, 'edit']">Edit</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}

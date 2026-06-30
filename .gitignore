@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+*.user
+
+# EF / local database
+*.mdf
+*.ldf
+
+# Angular / Node
+client/node_modules/
+client/dist/
+client/.angular/
+
+# IDE
+.vs/
+.idea/
+
+# Claude Code
+.claude/
+CLAUDE.md

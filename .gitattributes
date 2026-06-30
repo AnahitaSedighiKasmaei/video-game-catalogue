@@ -1,0 +1,11 @@
+# Normalize line endings to avoid CRLF/LF churn across machines
+* text=auto
+
+*.cs      text diff=csharp
+*.ts      text
+*.html    text
+*.scss    text
+*.json    text
+*.md      text
+*.sln     text eol=crlf
+*.csproj  text
