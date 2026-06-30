@@ -1,51 +1,36 @@
 # Video Game Catalogue
 
-A small full-stack application for browsing and editing a catalogue of video games.
+A small full-stack app for browsing and editing a list of video games. An ASP.NET Core
+REST API backed by SQL Server, with an Angular front end.
 
-- **Backend:** ASP.NET Core 8 (LTS), EF Core 8, SQL Server, Clean Architecture
-- **Frontend:** Angular 17, standalone components, reactive forms, Bootstrap
+It's deliberately simple on the surface — two screens, a handful of endpoints — so the
+interesting part is how it's put together rather than what it does.
 
-## Solution layout
+## Running it locally
 
-```
-src/
-  VideoGameCatalogue.Domain          Entities, domain exceptions, business invariants (no framework deps)
-  VideoGameCatalogue.Application      Use cases, DTOs, validation, mapping, service & repository contracts
-  VideoGameCatalogue.Infrastructure   EF Core DbContext, Fluent configuration, repository, migrations, seed
-  VideoGameCatalogue.API              Thin controllers, exception-handling middleware, DI composition
-client/                               Angular 17 SPA
-tests/
-  VideoGameCatalogue.UnitTests        xUnit tests for the domain, service and validators
-```
+You'll need the .NET 8 SDK, Node 18+, and SQL Server LocalDB (which ships with Visual
+Studio and the SQL Server Express installer).
 
-Dependencies point inward: `API → Infrastructure → Application → Domain`. The Domain
-project references nothing but the BCL.
-
-## Running it
-
-### API
+**API**
 
 ```bash
 cd src/VideoGameCatalogue.API
 dotnet run
 ```
 
-- Serves on `http://localhost:5031` (HTTP only, per the brief — no SSL).
-- In Development it applies EF migrations on startup, so the LocalDB database is created
-  and seeded automatically on first run.
-- Swagger UI: `http://localhost:5031/swagger`.
+It comes up on http://localhost:5031 (HTTP only — there was no SSL requirement). On the
+first run in Development it creates the LocalDB database and applies the migration
+automatically, so there's nothing to set up by hand. Swagger is at `/swagger`.
 
-The connection string lives in `appsettings.json` and targets LocalDB by default:
-`Server=(localdb)\MSSQLLocalDB;Database=VideoGameCatalogue;...`.
-
-To manage the schema manually instead:
+The connection string is in `appsettings.json` and points at
+`(localdb)\MSSQLLocalDB`. If you'd rather manage the schema yourself:
 
 ```bash
 dotnet tool restore
-dotnet dotnet-ef database update --project src/VideoGameCatalogue.Infrastructure --startup-project src/VideoGameCatalogue.Infrastructure
+dotnet ef database update --project src/VideoGameCatalogue.Infrastructure --startup-project src/VideoGameCatalogue.Infrastructure
 ```
 
-### Frontend
+**Front end**
 
 ```bash
 cd client
@@ -53,41 +38,75 @@ npm install
 npm start
 ```
 
-Serves on `http://localhost:4200` and talks to the API at `http://localhost:5031/api`
-(configurable in `src/environments/environment.ts`). CORS for this origin is enabled by the API.
+Runs on http://localhost:4200 and talks to the API at `http://localhost:5031/api`. The
+API already allows that origin through CORS, so as long as both are running you're good.
+The API URL lives in `src/environments/environment.ts` if you need to change it.
 
-### Tests
+**Tests**
 
 ```bash
 dotnet test
 ```
 
-## API
+## How it's structured
 
-| Method | Route                       | Purpose                          |
-|--------|-----------------------------|----------------------------------|
-| GET    | `/api/videogames?search=`   | List games, optional text filter |
-| GET    | `/api/videogames/{id}`      | Get a single game                |
-| PUT    | `/api/videogames/{id}`      | Update a game                    |
+The backend follows Clean Architecture — four projects, with all the references pointing
+inward toward the domain:
 
-Errors are returned as RFC 7807 `ProblemDetails` (validation failures as
-`ValidationProblemDetails`) produced by a single exception-handling middleware.
-
-## Key decisions
-
-- **Clean Architecture with the repository contract in the Application layer** so Infrastructure
-  depends inward. A single focused `IVideoGameRepository` (the aggregate root) is used rather than
-  a generic repository, which would leak `IQueryable`/EF concerns across the boundary.
-- **Rich domain entity.** `VideoGame` enforces its own invariants through the constructor and
-  `Update` method; there are no public setters, so an invalid game cannot exist in memory or be
-  persisted. Business rules stay out of controllers, services and repositories.
-- **Validation in two complementary places.** FluentValidation gives callers fast, field-level
-  feedback on the request shape before the use case runs; the entity re-checks invariants as the
-  domain's source of truth.
-- **Manual mapping** (extension method) instead of AutoMapper — the model is small and explicit
-  mapping is easier to read and debug. No mapping library earns its keep here.
-- **Plain Bootstrap, not ng-bootstrap** — the UI has no interactive widget that would justify the
-  extra dependency.
-- **NSubstitute + plain xUnit asserts** in tests; only the repository (a real boundary) is mocked.
-  The real validator is used in service tests because validation is part of the use case contract.
 ```
+Domain          The VideoGame entity and its rules. No framework dependencies at all.
+Application     Use cases, DTOs, validation, and the service/repository interfaces.
+Infrastructure  EF Core — the DbContext, mappings, the repository, migrations and seed data.
+API             Controllers and the exception-handling middleware. Thin.
+```
+
+The `client/` folder is the Angular app, organised by feature
+(`features/games/{pages,services,models}`) with standalone components and reactive forms.
+
+A few things worth calling out, since they were conscious choices:
+
+- **The `VideoGame` entity guards its own state.** There are no public setters — you go
+  through the constructor or `Update()`, and both validate. So you can't end up with a
+  game that has a blank title or a rating of 50 sitting in memory, let alone in the
+  database. The business rules live in one place instead of being scattered across the
+  service and the controller.
+
+- **The repository interface lives in the Application layer, not Infrastructure.** That's
+  what lets Infrastructure depend inward. It's a single repository for the `VideoGame`
+  aggregate rather than a generic `Repository<T>` — a generic one tends to leak EF/IQueryable
+  details across the boundary and rarely pays off on a project this size.
+
+- **Validation happens in two places on purpose.** FluentValidation checks the incoming
+  request shape and gives the client clean field-level errors; the entity re-checks its
+  invariants because that's the domain's job, not the API's.
+
+- **Mapping is done by hand.** The objects are tiny, so a one-line extension method is
+  clearer than wiring up AutoMapper and easier to step through in a debugger.
+
+- **Errors go through one middleware** that turns exceptions into consistent
+  `ProblemDetails` responses, so the controllers don't need try/catch blocks.
+
+- **Plain Bootstrap on the front end, not ng-bootstrap.** There's no modal, datepicker or
+  typeahead here that would justify the extra dependency — a table and a form only need
+  the stylesheet.
+
+## The API
+
+| Method | Route                     | What it does                              |
+|--------|---------------------------|-------------------------------------------|
+| GET    | `/api/videogames?search=` | List games, with an optional text filter  |
+| GET    | `/api/videogames/{id}`    | Get one game                              |
+| PUT    | `/api/videogames/{id}`    | Update a game                             |
+
+Validation failures come back as a 400 with the field errors; a missing id is a 404.
+
+## Notes / things I'd add with more time
+
+- I kept the API to list/search/get/update because that's what the two screens need.
+  Adding create and delete would be straightforward — a new request DTO, a validator, and
+  a couple of repository methods.
+- The unit tests cover the domain rules, the service, and the validator. The obvious next
+  step would be a few integration tests hitting the API with an in-memory or SQLite
+  provider.
+- Targeting .NET 8 (the current LTS) and Angular 17 — the Angular version was also what the
+  local Node 18 runtime supported cleanly.
